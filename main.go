@@ -130,6 +130,15 @@ func scanExistingContainers(
 		log.Println("list container error:", err)
 		return
 	}
+
+	// Print all existing containers
+	log.Printf("[Docker] Found %d existing containers:", len(list))
+	for _, c := range list {
+		inspect, _ := cli.ContainerInspect(ctx, c.ID)
+		name := strings.TrimPrefix(inspect.Name, "/")
+		log.Printf("  - %s (%s)", name, c.ID[:12])
+	}
+
 	for _, c := range list {
 		mgr.Start(ctx, cli, slsClient, cfg, c.ID)
 	}
@@ -150,10 +159,19 @@ func watchDockerEvents(
 			if e.Type != events.ContainerEventType {
 				continue
 			}
+			shortID := e.ID[:12]
 			switch e.Action {
 			case "start":
+				// Get container name for logging
+				inspect, _ := cli.ContainerInspect(ctx, e.ID)
+				name := strings.TrimPrefix(inspect.Name, "/")
+				log.Printf("[Docker] Container started: %s (%s)", name, shortID)
 				mgr.Start(ctx, cli, slsClient, cfg, e.ID)
 			case "die", "stop", "destroy":
+				// Get container name for logging
+				inspect, _ := cli.ContainerInspect(ctx, e.ID)
+				name := strings.TrimPrefix(inspect.Name, "/")
+				log.Printf("[Docker] Container %s: %s (%s)", e.Action, name, shortID)
 				mgr.Stop(e.ID)
 			}
 		case err := <-errCh:
@@ -283,6 +301,8 @@ func streamLogs(
 	var buf []*sls.Log
 	lastFlush := time.Now()
 
+	log.Printf("[%s] Start streaming logs", meta.Name)
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -298,7 +318,9 @@ func streamLogs(
 				continue
 			}
 
-			buf = append(buf, buildLog(meta, scanner.Text()))
+			logLine := scanner.Text()
+			timestamp, msg := parseDockerTimestamp(logLine)
+			buf = append(buf, buildLog(meta, msg, timestamp))
 
 			if time.Since(lastFlush) >= time.Second*time.Duration(cfg.Sync.FlushIntervalSeconds) {
 				if len(buf) > 0 {
@@ -312,14 +334,27 @@ func streamLogs(
 	}
 }
 
+// parseDockerTimestamp parses Docker log line with timestamp
+// Docker format: "2006-01-02T15:04:05.999999999Z07:00 log message"
+func parseDockerTimestamp(line string) (uint32, string) {
+	// Try to parse RFC3339 timestamp
+	fields := strings.SplitN(line, " ", 2)
+	if len(fields) >= 2 {
+		if ts, err := time.Parse(time.RFC3339Nano, fields[0]); err == nil {
+			return uint32(ts.Unix()), fields[1]
+		}
+	}
+	// Fallback: use current time
+	return uint32(time.Now().Unix()), line
+}
+
 /* =======================
    SLS
 ======================= */
 
-func buildLog(meta ContainerMeta, msg string) *sls.Log {
-	t := uint32(time.Now().Unix())
+func buildLog(meta ContainerMeta, msg string, timestamp uint32) *sls.Log {
 	return &sls.Log{
-		Time: &t,
+		Time: &timestamp,
 		Contents: []*sls.LogContent{
 			{Key: proto.String("message"), Value: proto.String(msg)},
 			{Key: proto.String("container"), Value: proto.String(meta.Name)},
@@ -380,6 +415,14 @@ func main() {
 		AccessKeySecret: cfg.SLS.AccessKeySecret,
 		SecurityToken:   "",
 	}
+
+	// Verify SLS access
+	log.Printf("[SLS] Verifying access to project=%s, logstore=%s", cfg.SLS.Project, cfg.SLS.Logstore)
+	_, err = slsClient.GetLogStore(cfg.SLS.Project, cfg.SLS.Logstore)
+	if err != nil {
+		log.Fatalf("[SLS] Failed to verify access: %v", err)
+	}
+	log.Printf("[SLS] Access verified successfully")
 
 	ctx := context.Background()
 	mgr := NewContainerManager()
