@@ -208,7 +208,7 @@ func handleContainer(
 		Image:    name,
 		ImageTag: tag,
 		Ports:    parsePorts(inspect),
-		HostIP:   getHostIP(),
+		HostIP:   getHostIP(cfg.SLS.Endpoint),
 	}
 
 	streamLogs(ctx, cli, slsClient, cfg, meta)
@@ -233,8 +233,12 @@ func parsePorts(inspect types.ContainerJSON) string {
 	return strings.Join(ports, ",")
 }
 
-func getHostIP() string {
-	conn, err := net.Dial("udp", "8.8.8.8:80")
+func getHostIP(endpoint string) string {
+	host, _, _ := net.SplitHostPort(endpoint)
+	if host == "" {
+		host = endpoint
+	}
+	conn, err := net.Dial("udp", host+":80")
 	if err != nil {
 		return "unknown"
 	}
