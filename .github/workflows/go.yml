@@ -18,7 +18,7 @@ jobs:
         include:
           - os: linux
             arch: amd64
-            output: sls_stats
+            output: dockerlog_sls
 
     steps:
       - name: Checkout
