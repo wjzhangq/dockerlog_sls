@@ -16,9 +16,6 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: windows
-            arch: amd64
-            output: sls_stats.exe
           - os: linux
             arch: amd64
             output: sls_stats
