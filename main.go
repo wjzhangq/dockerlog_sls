@@ -60,12 +60,14 @@ func loadConfig(path string) (*Config, error) {
 ======================= */
 
 type ContainerMeta struct {
-	ID       string
-	Name     string
-	Image    string
-	ImageTag string
-	Ports    string
-	HostIP   string
+	ID        string
+	ContainerID string
+	Name      string
+	Image     string
+	ImageTag  string
+	Ports     string
+	HostIP    string
+	LogStream string
 }
 
 /* =======================
@@ -199,16 +201,27 @@ func handleContainer(
 	name, tag := image, "latest"
 	if strings.Contains(image, ":") {
 		p := strings.SplitN(image, ":", 2)
-		name, tag = p[0], p[1]
+		// Handle registry URL: registry-sy.xcloud.lenovo.com/smart-meeting-summary/service:tag
+		// Extract image name without registry and use last part as tag
+		if strings.Contains(p[0], "/") {
+			// Remove registry prefix
+			lastSlash := strings.LastIndex(p[0], "/")
+			name = p[0][lastSlash+1:]
+		} else {
+			name = p[0]
+		}
+		tag = p[1]
 	}
 
 	meta := ContainerMeta{
-		ID:       inspect.ID[:12],
-		Name:     strings.TrimPrefix(inspect.Name, "/"),
-		Image:    name,
-		ImageTag: tag,
-		Ports:    parsePorts(inspect),
-		HostIP:   getHostIP(cfg.SLS.Endpoint),
+		ID:          inspect.ID[:12],
+		ContainerID: inspect.ID[:12],
+		Name:        strings.TrimPrefix(inspect.Name, "/"),
+		Image:       name,
+		ImageTag:    tag,
+		Ports:       parsePorts(inspect),
+		HostIP:      getHostIP(cfg.SLS.Endpoint),
+		LogStream:   "stdout/stderr",
 	}
 
 	streamLogs(ctx, cli, slsClient, cfg, meta)
@@ -361,11 +374,13 @@ func buildLog(meta ContainerMeta, msg string, timestamp uint32) *sls.Log {
 		Time: &timestamp,
 		Contents: []*sls.LogContent{
 			{Key: proto.String("message"), Value: proto.String(msg)},
+			{Key: proto.String("container_id"), Value: proto.String(meta.ContainerID)},
 			{Key: proto.String("container"), Value: proto.String(meta.Name)},
 			{Key: proto.String("image"), Value: proto.String(meta.Image)},
 			{Key: proto.String("tag"), Value: proto.String(meta.ImageTag)},
 			{Key: proto.String("ports"), Value: proto.String(meta.Ports)},
 			{Key: proto.String("host_ip"), Value: proto.String(meta.HostIP)},
+			{Key: proto.String("log_stream"), Value: proto.String(meta.LogStream)},
 		},
 	}
 }
