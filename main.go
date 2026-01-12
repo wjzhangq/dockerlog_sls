@@ -44,6 +44,9 @@ type Config struct {
 		FlushIntervalSeconds int    `json:"flush_interval_seconds"`
 		MaxRewindLines       int    `json:"max_rewind_lines"`
 	} `json:"sync"`
+
+	Env               string            `json:"env"`
+	ImageDomainMap    map[string]string `json:"image_domain_map"`
 }
 
 func loadConfig(path string) (*Config, error) {
@@ -60,14 +63,16 @@ func loadConfig(path string) (*Config, error) {
 ======================= */
 
 type ContainerMeta struct {
-	ID        string
+	ID          string
 	ContainerID string
-	Name      string
-	Image     string
-	ImageTag  string
-	Ports     string
-	HostIP    string
-	LogStream string
+	Name        string
+	Image       string
+	ImageTag    string
+	Ports       string
+	HostIP      string
+	LogStream   string
+	Domain      string
+	Env         string
 }
 
 /* =======================
@@ -222,6 +227,8 @@ func handleContainer(
 		Ports:       parsePorts(inspect),
 		HostIP:      getHostIP(cfg.SLS.Endpoint),
 		LogStream:   "stdout/stderr",
+		Domain:      getDomain(name, cfg.ImageDomainMap),
+		Env:         cfg.Env,
 	}
 
 	streamLogs(ctx, cli, slsClient, cfg, meta)
@@ -257,6 +264,13 @@ func getHostIP(endpoint string) string {
 	}
 	defer conn.Close()
 	return conn.LocalAddr().(*net.UDPAddr).IP.String()
+}
+
+func getDomain(image string, domainMap map[string]string) string {
+	if domain, ok := domainMap[image]; ok {
+		return domain
+	}
+	return ""
 }
 
 /* =======================
@@ -381,6 +395,8 @@ func buildLog(meta ContainerMeta, msg string, timestamp uint32) *sls.Log {
 			{Key: proto.String("ports"), Value: proto.String(meta.Ports)},
 			{Key: proto.String("host_ip"), Value: proto.String(meta.HostIP)},
 			{Key: proto.String("log_stream"), Value: proto.String(meta.LogStream)},
+			{Key: proto.String("domain"), Value: proto.String(meta.Domain)},
+			{Key: proto.String("env"), Value: proto.String(meta.Env)},
 		},
 	}
 }

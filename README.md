@@ -31,6 +31,10 @@
     "offset_dir": "/var/run/dockerlog-sls",
     "flush_interval_seconds": 3,
     "max_rewind_lines": 100
+  },
+  "env": "prod",
+  "image_domain_map": {
+    "test/test2": "www.test.com"
   }
 }
 ```
@@ -49,6 +53,8 @@
 | `sync.offset_dir` | 采集位置保存目录 |
 | `sync.flush_interval_seconds` | 日志上传间隔（秒） |
 | `sync.max_rewind_lines` | 重采最大回溯行数 |
+| `env` | 环境标识（prod/test/dev） |
+| `image_domain_map` | 镜像域名映射表 |
 
 ## 使用方法
 
@@ -67,11 +73,15 @@ go build -o dockerlog_sls
 | 字段 | 说明 |
 |------|------|
 | `message` | 日志内容 |
+| `container_id` | 容器短 ID |
 | `container` | 容器名称 |
 | `image` | 镜像名称 |
 | `tag` | 镜像标签 |
 | `ports` | 端口映射 |
 | `host_ip` | 主机 IP |
+| `log_stream` | 日志流类型（stdout/stderr） |
+| `domain` | 镜像域名 |
+| `env` | 环境标识 |
 
 ## 输出示例
 
