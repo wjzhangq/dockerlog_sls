@@ -30,7 +30,9 @@
   "sync": {
     "offset_dir": "/var/run/dockerlog-sls",
     "flush_interval_seconds": 3,
-    "max_rewind_lines": 100
+    "max_rewind_lines": 100,
+    "flush_size_limit": 31457280,
+    "max_log_size": 65536
   },
   "env": "prod",
   "image_domain_map": {
@@ -53,6 +55,8 @@
 | `sync.offset_dir` | 采集位置保存目录 |
 | `sync.flush_interval_seconds` | 日志上传间隔（秒） |
 | `sync.max_rewind_lines` | 重采最大回溯行数 |
+| `sync.flush_size_limit` | 缓冲区大小限制（字节），超限自动上传，默认 30MB |
+| `sync.max_log_size` | 单条日志最大长度，超长截断，默认 64KB |
 | `env` | 环境标识（prod/test/dev） |
 | `image_domain_map` | 镜像域名映射表 |
 

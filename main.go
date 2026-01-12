@@ -42,6 +42,8 @@ type Config struct {
 		OffsetDir            string `json:"offset_dir"`
 		FlushIntervalSeconds int    `json:"flush_interval_seconds"`
 		MaxRewindLines       int    `json:"max_rewind_lines"`
+		FlushSizeLimit       int    `json:"flush_size_limit"`
+		MaxLogSize           int    `json:"max_log_size"`
 	} `json:"sync"`
 
 	Env               string            `json:"env"`
@@ -354,10 +356,16 @@ func streamLogs(
 			}
 
 			logLine := scanner.Text()
-			timestamp, msg := parseDockerTimestamp(logLine)
+			timestamp, msg := parseDockerTimestamp(logLine, cfg.Sync.MaxLogSize)
 			buf = append(buf, buildLog(meta, msg, timestamp))
 
-			if time.Since(lastFlush) >= time.Second*time.Duration(cfg.Sync.FlushIntervalSeconds) {
+			// Flush if size limit reached
+			if shouldFlushBySize(buf, cfg.Sync.FlushSizeLimit) {
+				putLogs(slsClient, cfg, meta, buf)
+				saveOffset(offsetFile, lineNum)
+				buf = nil
+				lastFlush = time.Now()
+			} else if time.Since(lastFlush) >= time.Second*time.Duration(cfg.Sync.FlushIntervalSeconds) {
 				if len(buf) > 0 {
 					putLogs(slsClient, cfg, meta, buf)
 					saveOffset(offsetFile, lineNum)
@@ -369,18 +377,41 @@ func streamLogs(
 	}
 }
 
+// shouldFlushBySize checks if buffer size exceeds limit (in bytes)
+// SLS limit is 33550336 bytes (32MB)
+func shouldFlushBySize(buf []*sls.Log, limit int) bool {
+	if limit <= 0 {
+		return false
+	}
+	var size int
+	for _, log := range buf {
+		for _, c := range log.Contents {
+			size += len(c.GetKey()) + len(c.GetValue())
+		}
+	}
+	return size >= limit
+}
+
 // parseDockerTimestamp parses Docker log line with timestamp
 // Docker format: "2006-01-02T15:04:05.999999999Z07:00 log message"
-func parseDockerTimestamp(line string) (uint32, string) {
+func parseDockerTimestamp(line string, maxSize int) (uint32, string) {
 	// Try to parse RFC3339 timestamp
 	fields := strings.SplitN(line, " ", 2)
 	if len(fields) >= 2 {
 		if ts, err := time.Parse(time.RFC3339Nano, fields[0]); err == nil {
-			return uint32(ts.Unix()), fields[1]
+			msg := fields[1]
+			if maxSize > 0 && len(msg) > maxSize {
+				msg = msg[:maxSize]
+			}
+			return uint32(ts.Unix()), msg
 		}
 	}
 	// Fallback: use current time
-	return uint32(time.Now().Unix()), line
+	msg := line
+	if maxSize > 0 && len(msg) > maxSize {
+		msg = msg[:maxSize]
+	}
+	return uint32(time.Now().Unix()), msg
 }
 
 /* =======================

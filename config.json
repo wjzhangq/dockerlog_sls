@@ -17,6 +17,8 @@
   "sync": {
     "offset_dir": "/var/lib/docker-log-agent/offsets",
     "flush_interval_seconds": 1,
-    "max_rewind_lines": 100
+    "max_rewind_lines": 100,
+    "flush_size_limit": 31457280,
+    "max_log_size": 65536    
   }
 }
