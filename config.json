@@ -1,0 +1,22 @@
+{
+  "env": "prod",
+  "docker": {
+    "sock": "/var/run/docker.sock",
+    "scan_existing": true
+  },
+  "image_domain_map": {
+    "test/test2": "www.test.com"
+  },  
+  "sls": {
+    "endpoint": "cn-hangzhou.log.aliyuncs.com",
+    "access_key_id": "AKIDxxxxxxxx",
+    "access_key_secret": "AKSECRETxxxxxxxx",
+    "project": "docker-log-project",
+    "logstore": "container-logs"
+  },
+  "sync": {
+    "offset_dir": "/var/lib/docker-log-agent/offsets",
+    "flush_interval_seconds": 1,
+    "max_rewind_lines": 100
+  }
+}

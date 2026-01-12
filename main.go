@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net"
 	"os"
@@ -207,16 +206,18 @@ func handleContainer(
 	if strings.Contains(image, ":") {
 		p := strings.SplitN(image, ":", 2)
 		// Handle registry URL: registry-sy.xcloud.lenovo.com/smart-meeting-summary/service:tag
-		// Extract image name without registry and use last part as tag
+		// Extract image path after registry, keep full path
 		if strings.Contains(p[0], "/") {
-			// Remove registry prefix
-			lastSlash := strings.LastIndex(p[0], "/")
-			name = p[0][lastSlash+1:]
+			// Find first slash after registry, keep everything after it
+			firstSlash := strings.Index(p[0], "/")
+			name = p[0][firstSlash+1:]
 		} else {
 			name = p[0]
 		}
 		tag = p[1]
 	}
+	// Remove leading / if present
+	name = strings.TrimPrefix(name, "/")
 
 	meta := ContainerMeta{
 		ID:          inspect.ID[:12],
@@ -239,15 +240,18 @@ func handleContainer(
 ======================= */
 
 func parsePorts(inspect types.ContainerJSON) string {
-	var ports []string
-	for p, bindings := range inspect.NetworkSettings.Ports {
-		for _, b := range bindings {
-			s := fmt.Sprintf("%s->%s", p.Port(), b.HostPort)
-			if p.Proto() == "udp" {
-				s += "/udp"
-			}
-			ports = append(ports, s)
+	portSet := make(map[string]struct{})
+	for p := range inspect.NetworkSettings.Ports {
+		port := p.Port()
+		if p.Proto() == "udp" {
+			port += "/udp"
 		}
+		portSet[port] = struct{}{}
+	}
+
+	var ports []string
+	for port := range portSet {
+		ports = append(ports, port)
 	}
 	sort.Strings(ports)
 	return strings.Join(ports, ",")
